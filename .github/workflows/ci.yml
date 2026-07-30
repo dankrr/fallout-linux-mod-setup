@@ -1,26 +1,15 @@
-name: CI
+name: shellcheck
 
-on:
-  push:
-  pull_request:
+on: [push, pull_request]
 
 permissions:
   contents: read
 
 jobs:
-  shell:
+  check:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Install ShellCheck
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes shellcheck
-
-      - name: Check Bash syntax
-        run: bash -n fallout-linux-mod-setup.sh
-
-      - name: Run ShellCheck
-        run: shellcheck fallout-linux-mod-setup.sh
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - run: bash -n fallout-linux-mod-setup.sh
+      - run: shellcheck fallout-linux-mod-setup.sh
