@@ -43,8 +43,12 @@ stop_steam() {
     steam_running || return 0
 
     say "closing Steam"
-    command -v steam >/dev/null && steam -shutdown >/dev/null 2>&1 || true
-    command -v flatpak >/dev/null && flatpak kill com.valvesoftware.Steam >/dev/null 2>&1 || true
+    if command -v steam >/dev/null; then
+        steam -shutdown >/dev/null 2>&1 || true
+    fi
+    if command -v flatpak >/dev/null; then
+        flatpak kill com.valvesoftware.Steam >/dev/null 2>&1 || true
+    fi
 
     for _ in {1..30}; do
         steam_running || return 0
