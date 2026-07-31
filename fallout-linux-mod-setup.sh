@@ -11,6 +11,8 @@ LAUNCH_OPTIONS='WINEDLLOVERRIDES="ddraw.dll=n,b" %command%'
 workdir=""
 fo1_backup=""
 fo1_moved=0
+want_ettu=0
+want_rpu=0
 
 say()  { printf '\n==> %s\n' "$*"; }
 warn() { printf '\nwarning: %s\n' "$*" >&2; }
@@ -31,7 +33,44 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for cmd in curl unzip python3 wine pgrep; do
+choose_install() {
+    local choice=${INSTALL_MODE:-}
+
+    while true; do
+        if [[ -z $choice ]]; then
+            printf '\nWhat do you want to install?\n'
+            printf '  1) Restoration Project Updated (Fallout 2)\n'
+            printf '  2) Fallout Et Tu (Fallout 1in2)\n'
+            printf '  3) Both\n\n'
+            read -r -p 'Choose [1-3]: ' choice || die "no option selected"
+        fi
+
+        case ${choice,,} in
+            1|rpu|restoration)
+                want_rpu=1
+                ;;
+            2|ettu|et-tu|fo1in2|fallout1in2)
+                want_ettu=1
+                ;;
+            3|both|all)
+                want_ettu=1
+                want_rpu=1
+                ;;
+            *)
+                warn "choose 1, 2, or 3"
+                choice=""
+                continue
+                ;;
+        esac
+        break
+    done
+}
+
+choose_install
+
+required=(curl unzip python3 pgrep)
+((want_ettu)) && required+=(wine)
+for cmd in "${required[@]}"; do
     command -v "$cmd" >/dev/null || die "missing command: $cmd"
 done
 
@@ -68,7 +107,6 @@ roots = [
     Path.home() / ".local/share/Steam",
     Path.home() / ".var/app/com.valvesoftware.Steam/.local/share/Steam",
 ]
-
 found = []
 seen = set()
 
@@ -112,34 +150,94 @@ find_file() {
     find "$1" -maxdepth 1 -type f -iname "$2" -print -quit
 }
 
-FALLOUT1_DIR=${FALLOUT1_DIR:-$(find_game "$FO1_ID")}
-FALLOUT2_DIR=${FALLOUT2_DIR:-$(find_game "$FO2_ID")}
-
-[[ -d $FALLOUT1_DIR ]] || die "Fallout 1 is not installed"
+FALLOUT2_DIR=${FALLOUT2_DIR:-}
+[[ -n $FALLOUT2_DIR ]] || FALLOUT2_DIR=$(find_game "$FO2_ID" || true)
 [[ -d $FALLOUT2_DIR ]] || die "Fallout 2 is not installed"
-[[ ! -e $FALLOUT1_DIR/.fallout1in2 && ! -e $FALLOUT1_DIR/.fallout1in2-steam-takeover ]] || die "Fallout 1in2 is already installed"
-[[ ! -e $FALLOUT2_DIR/.rpu-linux && ! -e $FALLOUT2_DIR/.rpu-linux-setup ]] || die "RPU is already installed"
 
-fo1_master=$(find_file "$FALLOUT1_DIR" master.dat)
-fo2_master=$(find_file "$FALLOUT2_DIR" master.dat)
-fo2_critter=$(find_file "$FALLOUT2_DIR" critter.dat)
+if ((want_ettu)); then
+    FALLOUT1_DIR=${FALLOUT1_DIR:-}
+    [[ -n $FALLOUT1_DIR ]] || FALLOUT1_DIR=$(find_game "$FO1_ID" || true)
+    [[ -d $FALLOUT1_DIR ]] || die "Fallout 1 is not installed"
+    [[ ! -e $FALLOUT1_DIR/.fallout1in2 && ! -e $FALLOUT1_DIR/.fallout1in2-steam-takeover ]] || die "Fallout Et Tu is already installed"
 
-[[ -n $fo1_master ]] || die "Fallout 1 master.dat was not found"
-[[ -n $fo2_master ]] || die "Fallout 2 master.dat was not found"
-[[ -n $fo2_critter ]] || die "Fallout 2 critter.dat was not found"
+    fo1_master=$(find_file "$FALLOUT1_DIR" master.dat)
+    fo2_master=$(find_file "$FALLOUT2_DIR" master.dat)
+    fo2_critter=$(find_file "$FALLOUT2_DIR" critter.dat)
+    [[ -n $fo1_master ]] || die "Fallout 1 master.dat was not found"
+    [[ -n $fo2_master ]] || die "Fallout 2 master.dat was not found"
+    [[ -n $fo2_critter ]] || die "Fallout 2 critter.dat was not found"
+fi
 
-printf 'Fallout 1: %s\nFallout 2: %s\n' "$FALLOUT1_DIR" "$FALLOUT2_DIR"
+if ((want_rpu)); then
+    [[ ! -e $FALLOUT2_DIR/.rpu-linux && ! -e $FALLOUT2_DIR/.rpu-linux-setup ]] || die "RPU is already installed"
+fi
+
+((want_ettu)) && printf 'Fallout 1: %s\n' "$FALLOUT1_DIR"
+printf 'Fallout 2: %s\n' "$FALLOUT2_DIR"
 stop_steam
 workdir=$(mktemp -d -t fallout-setup.XXXXXXXX)
 
-cp -a "$fo1_master" "$workdir/fo1-master.dat"
-cp -a "$fo2_master" "$workdir/master.dat"
-cp -a "$fo2_critter" "$workdir/critter.dat"
+install_ettu() {
+    cp -a "$fo1_master" "$workdir/fo1-master.dat"
+    cp -a "$fo2_master" "$workdir/master.dat"
+    cp -a "$fo2_critter" "$workdir/critter.dat"
 
-say "downloading Fallout 1in2"
-curl -fL --retry 3 -o "$workdir/fo1in2.zip" "$FO1IN2_URL"
+    say "downloading Fallout Et Tu"
+    curl -fL --retry 3 -o "$workdir/fo1in2.zip" "$FO1IN2_URL"
 
-if [[ -z $RPU_URL ]]; then
+    mkdir "$workdir/fo1in2"
+    unzip -q "$workdir/fo1in2.zip" -d "$workdir/fo1in2"
+    local payload
+    payload=$(find "$workdir/fo1in2" -type f -iname Fallout2.exe -print -quit)
+    [[ -n $payload ]] || die "Fallout Et Tu archive layout was not recognized"
+    payload=$(dirname "$payload")
+    [[ -f $payload/undat.sh ]] || die "undat.sh is missing from Fallout Et Tu"
+
+    say "installing Fallout Et Tu"
+    fo1_backup="${FALLOUT1_DIR}.vanilla-$(date +%Y%m%d-%H%M%S)"
+    mv "$FALLOUT1_DIR" "$fo1_backup"
+    mkdir -p "$FALLOUT1_DIR"
+    fo1_moved=1
+
+    cp -a "$payload/." "$FALLOUT1_DIR/"
+    cp "$workdir/fo1-master.dat" "$FALLOUT1_DIR/MASTER.DAT"
+    chmod +x "$FALLOUT1_DIR/undat.sh"
+    (
+        cd "$FALLOUT1_DIR"
+        ./undat.sh MASTER.DAT
+    )
+    rm "$FALLOUT1_DIR/MASTER.DAT"
+    cp "$workdir/master.dat" "$FALLOUT1_DIR/master.dat"
+    cp "$workdir/critter.dat" "$FALLOUT1_DIR/critter.dat"
+
+    python3 - "$FALLOUT1_DIR/Fallout2.cfg" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8", errors="replace")
+values = {
+    "critter_dat": "critter.dat",
+    "master_dat": "master.dat",
+    "music_path2": "data\\sound\\music\\",
+}
+for key, value in values.items():
+    pattern = re.compile(rf"(?im)^{key}\s*=.*$")
+    text, count = pattern.subn(lambda _match: f"{key}={value}", text)
+    if not count:
+        raise SystemExit(f"missing setting in Fallout2.cfg: {key}")
+path.write_text(text, encoding="utf-8", newline="\r\n")
+PY
+
+    cp "$FALLOUT1_DIR/Fallout2.exe" "$FALLOUT1_DIR/falloutlauncher.exe"
+    printf 'backup=%s\n' "$fo1_backup" > "$FALLOUT1_DIR/.fallout1in2"
+    fo1_moved=0
+}
+
+resolve_rpu_url() {
+    [[ -n $RPU_URL ]] && return
+
     RPU_URL=$(python3 - "$RPU_REPO" <<'PY'
 import json
 import re
@@ -162,60 +260,10 @@ else:
     raise SystemExit("no RPU zip found in the latest release")
 PY
     ) || die "could not find the latest RPU release"
-fi
-
-say "downloading RPU"
-curl -fL --retry 3 -o "$workdir/rpu.zip" "$RPU_URL"
-
-say "installing Fallout 1in2"
-mkdir "$workdir/fo1in2"
-unzip -q "$workdir/fo1in2.zip" -d "$workdir/fo1in2"
-fo1_payload=$(find "$workdir/fo1in2" -type f -iname Fallout2.exe -print -quit)
-[[ -n $fo1_payload ]] || die "Fallout 1in2 archive layout was not recognized"
-fo1_payload=$(dirname "$fo1_payload")
-[[ -f $fo1_payload/undat.sh ]] || die "undat.sh is missing from Fallout 1in2"
-
-fo1_backup="${FALLOUT1_DIR}.vanilla-$(date +%Y%m%d-%H%M%S)"
-mv "$FALLOUT1_DIR" "$fo1_backup"
-mkdir -p "$FALLOUT1_DIR"
-fo1_moved=1
-
-cp -a "$fo1_payload/." "$FALLOUT1_DIR/"
-cp "$workdir/fo1-master.dat" "$FALLOUT1_DIR/MASTER.DAT"
-chmod +x "$FALLOUT1_DIR/undat.sh"
-(
-    cd "$FALLOUT1_DIR"
-    ./undat.sh MASTER.DAT
-)
-rm "$FALLOUT1_DIR/MASTER.DAT"
-cp "$workdir/master.dat" "$FALLOUT1_DIR/master.dat"
-cp "$workdir/critter.dat" "$FALLOUT1_DIR/critter.dat"
-
-python3 - "$FALLOUT1_DIR/Fallout2.cfg" <<'PY'
-import re
-import sys
-from pathlib import Path
-
-path = Path(sys.argv[1])
-text = path.read_text(encoding="utf-8", errors="replace")
-values = {
-    "critter_dat": "critter.dat",
-    "master_dat": "master.dat",
-    "music_path2": "data\\sound\\music\\",
 }
-for key, value in values.items():
-    text, count = re.subn(rf"(?im)^{key}\s*=.*$", f"{key}={value}", text)
-    if not count:
-        raise SystemExit(f"missing setting in Fallout2.cfg: {key}")
-path.write_text(text, encoding="utf-8", newline="\r\n")
-PY
 
-cp "$FALLOUT1_DIR/Fallout2.exe" "$FALLOUT1_DIR/falloutlauncher.exe"
-printf 'backup=%s\n' "$fo1_backup" > "$FALLOUT1_DIR/.fallout1in2"
-fo1_moved=0
-
-say "installing RPU"
-python3 - "$FALLOUT2_DIR" <<'PY'
+lowercase_tree() {
+    python3 - "$1" <<'PY'
 import os
 import sys
 from pathlib import Path
@@ -232,22 +280,38 @@ for current, dirs, files in os.walk(root, topdown=False):
             raise SystemExit(f"name conflict: {src} / {dst}")
         src.rename(dst)
 PY
+}
 
-mkdir "$workdir/rpu"
-unzip -q "$workdir/rpu.zip" -d "$workdir/rpu"
-rpu_installer=$(find "$workdir/rpu" -type f -iname rpu-install.sh -print -quit)
-[[ -n $rpu_installer ]] || die "rpu-install.sh was not found"
-rpu_payload=$(dirname "$rpu_installer")
-cp -a "$rpu_payload/." "$FALLOUT2_DIR/"
-chmod +x "$FALLOUT2_DIR/rpu-install.sh"
-(
-    cd "$FALLOUT2_DIR"
-    ./rpu-install.sh
-)
-printf 'release=%s\n' "$RPU_URL" > "$FALLOUT2_DIR/.rpu-linux"
+install_rpu() {
+    resolve_rpu_url
+    say "downloading RPU"
+    curl -fL --retry 3 -o "$workdir/rpu.zip" "$RPU_URL"
+
+    say "installing RPU"
+    lowercase_tree "$FALLOUT2_DIR"
+    mkdir "$workdir/rpu"
+    unzip -q "$workdir/rpu.zip" -d "$workdir/rpu"
+
+    local installer payload
+    installer=$(find "$workdir/rpu" -type f -iname rpu-install.sh -print -quit)
+    [[ -n $installer ]] || die "rpu-install.sh was not found"
+    payload=$(dirname "$installer")
+    cp -a "$payload/." "$FALLOUT2_DIR/"
+    chmod +x "$FALLOUT2_DIR/rpu-install.sh"
+    (
+        cd "$FALLOUT2_DIR"
+        ./rpu-install.sh
+    )
+    printf 'release=%s\n' "$RPU_URL" > "$FALLOUT2_DIR/.rpu-linux"
+}
+
+((want_ettu)) && install_ettu
+((want_rpu)) && install_rpu
 
 patch_vdf() {
-    python3 - "$1" "$LAUNCH_OPTIONS" "$FO1_ID" "$FO2_ID" <<'PY'
+    local vdf=$1
+    shift
+    python3 - "$vdf" "$LAUNCH_OPTIONS" "$@" <<'PY'
 import re
 import shutil
 import sys
@@ -315,6 +379,10 @@ print(f"updated {path}")
 PY
 }
 
+appids=()
+((want_ettu)) && appids+=("$FO1_ID")
+((want_rpu)) && appids+=("$FO2_ID")
+
 say "setting Steam launch options"
 declare -A configs=()
 for root in "${libraries[@]}" "$HOME/.steam/steam" "$HOME/.local/share/Steam" "$HOME/.var/app/com.valvesoftware.Steam/.local/share/Steam"; do
@@ -326,13 +394,15 @@ done
 
 if ((${#configs[@]})); then
     for file in "${!configs[@]}"; do
-        patch_vdf "$file"
+        patch_vdf "$file" "${appids[@]}"
     done
 else
-    warn "Steam config was not found. Add this launch option to both games:"
+    warn "Steam config was not found. Add this launch option to the selected game(s):"
     printf '%s\n' "$LAUNCH_OPTIONS"
 fi
 
 say "done"
-printf 'Fallout 1 backup: %s\n' "$fo1_backup"
-printf 'Restart Steam and start a new game in both.\n'
+((want_ettu)) && printf 'Fallout 1 backup: %s\n' "$fo1_backup"
+((want_ettu)) && printf 'Fallout now launches Fallout Et Tu.\n'
+((want_rpu)) && printf 'Fallout 2 now launches RPU.\n'
+printf 'Restart Steam and start a new game.\n'
