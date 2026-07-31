@@ -1,11 +1,12 @@
 # Fallout 1in2 + RPU setup for Linux
 
-One script for the Steam versions of Fallout 1 and Fallout 2.
+Installer for the Steam versions of Fallout 1 and Fallout 2.
 
-- Fallout's normal Steam button launches [Fallout Et Tu / Fallout 1in2](https://github.com/rotators/Fo1in2).
-- Fallout 2's normal Steam button launches [Restoration Project Updated](https://github.com/BGforgeNet/Fallout2_Restoration_Project).
+It asks whether to install:
 
-Both games must already be installed through Steam. The script downloads the mods; it does not include any game files.
+1. Restoration Project Updated for Fallout 2
+2. Fallout Et Tu / Fallout 1in2
+3. Both
 
 ## Install
 
@@ -29,28 +30,29 @@ cd fallout-linux-mod-setup
 ./fallout-linux-mod-setup.sh
 ```
 
-Launch both games once before running the script. Clean installs are recommended.
+Fallout 2 is required for every option. Fallout 1 and Wine are only needed for Fallout Et Tu.
 
-## What it does
+Launch the games once before running the script. Clean installs are recommended.
 
-- Finds both games, including games in extra Steam libraries.
-- Backs up Fallout 1, then replaces it with Fallout 1in2.
-- Installs RPU into Fallout 2.
-- Sets the `ddraw.dll` override needed by both mods.
+## What it changes
 
-The Fallout 1 backup is left next to the game folder with a `.vanilla-DATE` suffix.
-
-## Restore
-
-For Fallout 1, close Steam, remove the modded folder, and rename the `.vanilla-*` backup to the original folder name.
-
-For Fallout 2, use **Verify integrity of game files** in Steam. A clean reinstall may be needed to remove leftover mod files.
+- Fallout Et Tu replaces Fallout 1's normal Steam install. The original folder is backed up with a `.vanilla-DATE` suffix.
+- RPU is installed into Fallout 2.
+- The required `ddraw.dll` launch option is added only to the selected Steam entries.
 
 Both mods need a new game. Do not use old vanilla saves.
 
-## Overrides
+## Non-interactive use
 
-Custom paths or download URLs can be passed as environment variables:
+Skip the menu with `INSTALL_MODE`:
+
+```bash
+INSTALL_MODE=rpu ./fallout-linux-mod-setup.sh
+INSTALL_MODE=ettu ./fallout-linux-mod-setup.sh
+INSTALL_MODE=both ./fallout-linux-mod-setup.sh
+```
+
+Custom paths and download URLs can also be passed as environment variables:
 
 ```bash
 FALLOUT1_DIR="/path/to/Fallout" \
@@ -60,4 +62,6 @@ RPU_URL="https://example.com/rpu.zip" \
 ./fallout-linux-mod-setup.sh
 ```
 
-Unofficial community script. You need legitimate copies of both games. Code is MIT licensed; downloaded mods keep their own licenses.
+Steam Deck note: leave the per-game frame limit disabled if the mouse feels sluggish.
+
+Unofficial community script. You need legitimate copies of the games. Code is MIT licensed; downloaded mods keep their own licenses.
