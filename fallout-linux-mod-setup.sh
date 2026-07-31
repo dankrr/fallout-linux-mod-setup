@@ -35,35 +35,58 @@ trap cleanup EXIT
 
 choose_install() {
     local choice=${INSTALL_MODE:-}
+    local selected answer
 
     while true; do
         if [[ -z $choice ]]; then
             printf '\nWhat do you want to install?\n'
             printf '  1) Restoration Project Updated (Fallout 2)\n'
             printf '  2) Fallout Et Tu (Fallout 1in2)\n'
-            printf '  3) Both\n\n'
-            read -r -p 'Choose [1-3]: ' choice || die "no option selected"
+            printf '  3) Both\n'
+            printf '  4) Cancel\n\n'
+            read -r -p 'Choose [1-4]: ' choice || die "no option selected"
         fi
 
         case ${choice,,} in
             1|rpu|restoration)
                 want_rpu=1
+                selected="Restoration Project Updated for Fallout 2"
                 ;;
             2|ettu|et-tu|fo1in2|fallout1in2)
                 want_ettu=1
+                selected="Fallout Et Tu / Fallout 1in2"
                 ;;
             3|both|all)
                 want_ettu=1
                 want_rpu=1
+                selected="Fallout Et Tu and Restoration Project Updated"
+                ;;
+            4|cancel|quit|exit)
+                say "cancelled"
+                exit 0
                 ;;
             *)
-                warn "choose 1, 2, or 3"
+                warn "choose 1, 2, 3, or 4"
                 choice=""
                 continue
                 ;;
         esac
         break
     done
+
+    printf '\nYou selected: %s\n' "$selected"
+    case ${ASSUME_YES:-} in
+        1|y|Y|yes|YES|true|TRUE) return ;;
+    esac
+
+    read -r -p 'Continue? [y/N]: ' answer || answer=""
+    case ${answer,,} in
+        y|yes) ;;
+        *)
+            say "cancelled"
+            exit 0
+            ;;
+    esac
 }
 
 choose_install
