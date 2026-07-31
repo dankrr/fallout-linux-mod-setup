@@ -7,6 +7,9 @@ It asks whether to install:
 1. Restoration Project Updated for Fallout 2
 2. Fallout Et Tu / Fallout 1in2
 3. Both
+4. Cancel
+
+The script shows what you selected and asks for confirmation before changing anything. Only `y` or `yes` continues.
 
 ## Install
 
@@ -44,12 +47,12 @@ Both mods need a new game. Do not use old vanilla saves.
 
 ## Non-interactive use
 
-Skip the menu with `INSTALL_MODE`:
+Skip the menu and confirmation with `INSTALL_MODE` and `ASSUME_YES=1`:
 
 ```bash
-INSTALL_MODE=rpu ./fallout-linux-mod-setup.sh
-INSTALL_MODE=ettu ./fallout-linux-mod-setup.sh
-INSTALL_MODE=both ./fallout-linux-mod-setup.sh
+INSTALL_MODE=rpu ASSUME_YES=1 ./fallout-linux-mod-setup.sh
+INSTALL_MODE=ettu ASSUME_YES=1 ./fallout-linux-mod-setup.sh
+INSTALL_MODE=both ASSUME_YES=1 ./fallout-linux-mod-setup.sh
 ```
 
 Custom paths and download URLs can also be passed as environment variables:
